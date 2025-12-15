@@ -1,6 +1,6 @@
 # easy-yt-dlp
 
-for who lazy to use yt dlp!
+for people who lazy to use yt-dlp
 
 compatible for windows,
 
