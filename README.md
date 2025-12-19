@@ -11,7 +11,9 @@ only tested on windows,
 2. put the executable whereever you want, additionally [Latest yt-dlp releases](https://github.com/yt-dlp/yt-dlp/releases) at tools\
 
 ex)
+
 Downloads\easy-yt-dlp.exe
+
 Downloads\tools\yt-dlp.exe
 
 3. run the executable, paste your desired youtube link!
