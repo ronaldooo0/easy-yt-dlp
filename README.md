@@ -12,7 +12,7 @@ made for people who find the command line annoying
 
 - Simple GUI (no command line needed)
 - Download videos (mp4) or audio(mp3)
-- Automaticvally downloads 'yt-dlp' from [Latest yt-dlp releases](https://github.com/yt-dlp/yt-dlp/releases)
+- Automaticvally downloads `yt-dlp` from [Latest yt-dlp releases](https://github.com/yt-dlp/yt-dlp/releases)
 
 ## Usage
 
@@ -22,5 +22,5 @@ made for people who find the command line annoying
 
 ### Notes
 
-- dis tools uses **yt-dlp** internally
+- dis tool uses **yt-dlp** internally
 - Please make sure you comply with the terms of service of the website you are downloading from.
