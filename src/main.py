@@ -1,5 +1,6 @@
 import sys
 import subprocess
+import urllib.request
 from pathlib import Path
 from PySide6.QtWidgets import(
     QApplication, QWidget, QVBoxLayout, QHBoxLayout,
@@ -14,10 +15,65 @@ def base_dir() -> Path:
     return Path(__file__).resolve().parent.parent
 
 BASE_DIR = base_dir()
-YTDLP = BASE_DIR / "tools" / "yt-dlp.exe"
 DOWNLOADS = BASE_DIR / "downloads"
-DOWNLOADS.mkdir(exist_ok=True)
+YTDLP = BASE_DIR / "tools" / "yt-dlp.exe"
+YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
 
+def ensure_ytdlp(ytdlp_path: Path): # ytdlp_path = YTDLP, downloading yt-dlp if not exists
+    # check if ytdlp_path exists
+    if ytdlp_path.exists():
+        return
+    
+    # user agreement check
+    reply = QMessageBox.question(
+        None,
+        "apparently no yt-dlp found",
+        "yt-dlp is not found in the required location.\n\n"
+        "The program needs yt-dlp to work.\n"
+        "It will be downloaded from the official GitHub release.\n\n"
+        "Do you want to continue?",
+        QMessageBox.Yes | QMessageBox.No
+    )
+    if reply != QMessageBox.Yes:
+        # closes window if user declines
+        return
+    
+    # ensure parent directory exists
+    ytdlp_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    try:
+        QMessageBox.information(
+            None, 
+            "Downloading...", 
+            "seems you don hav yt-dlp in dedicated location, let us download for u"
+        )
+        
+        urllib.request.urlretrieve(YT_DLP_URL, ytdlp_path)
+        
+    except Exception as e:
+        QMessageBox.critical(
+            None,
+            "Download Error",
+            f"Failed to download yt-dlp:\n{e}"
+        )
+        return
+
+    # final confirmation
+    if not ytdlp_path.exists():
+        QMessageBox.critical(
+            None,
+            "Download failed",
+            "yt-dlp download did not complete correctly."
+        )
+        return
+
+    QMessageBox.information(
+        None,
+        "Completed",
+        "yt-dlp has been downloaded successfully."
+    )
+
+# basic download commdns
 def build_cmd(mode: str, url:str) -> list[str]:
     if mode == "video":
         return [
@@ -100,6 +156,8 @@ class App(QWidget):
         if not url:
             QMessageBox.warning(self, "Input Error", "Please enter a URL.")
             return
+        
+        DOWNLOADS.mkdir(exist_ok=True)
 
         if not YTDLP.exists():
             QMessageBox.critical(
@@ -149,6 +207,9 @@ class App(QWidget):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    
+    ensure_ytdlp(YTDLP)
+    
     w = App()
     w.show()
     sys.exit(app.exec())
