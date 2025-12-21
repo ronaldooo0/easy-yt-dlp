@@ -1,25 +1,38 @@
 import sys
 import subprocess
 import urllib.request
+import shlex
+
 from pathlib import Path
-from PySide6.QtWidgets import(
+from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QPlainTextEdit,
-    QRadioButton, QButtonGroup, QMessageBox 
+    QRadioButton, QButtonGroup, QMessageBox,
+    QCheckBox, QComboBox, QStackedWidget
 )
 from PySide6.QtCore import QProcess
+from PySide6.QtGui import QIcon
+
 
 def base_dir() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent.parent
 
+def resource_path(*parts: str) -> Path:
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS).resolve().joinpath(*parts)
+    return Path(__file__).resolve().parent.parent.joinpath(*parts)
+
+
 BASE_DIR = base_dir()
+ICON_PATH = resource_path("assets", "icon.ico")
 DOWNLOADS = BASE_DIR / "downloads"
 YTDLP = BASE_DIR / "tools" / "yt-dlp.exe"
 YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
 
-def ensure_ytdlp(ytdlp_path: Path): # ytdlp_path = YTDLP, downloading yt-dlp if not exists
+
+def ensure_ytdlp(ytdlp_path: Path): # ytdlp_path = YTDLP
     # check if ytdlp_path exists
     if ytdlp_path.exists():
         return
@@ -41,13 +54,8 @@ def ensure_ytdlp(ytdlp_path: Path): # ytdlp_path = YTDLP, downloading yt-dlp if 
     # ensure parent directory exists
     ytdlp_path.parent.mkdir(parents=True, exist_ok=True)
     
+    # download yt-dlp 
     try:
-        QMessageBox.information(
-            None, 
-            "Downloading...", 
-            "seems you don hav yt-dlp in dedicated location, let us download for u"
-        )
-        
         urllib.request.urlretrieve(YT_DLP_URL, ytdlp_path)
         
     except Exception as e:
@@ -74,57 +82,160 @@ def ensure_ytdlp(ytdlp_path: Path): # ytdlp_path = YTDLP, downloading yt-dlp if 
     )
 
 # basic download commdns
-def build_cmd(mode: str, url:str) -> list[str]:
+def build_cmd(
+    mode: str,
+    url: str,
+    *,
+    no_playlist: bool,
+    video_container: str,
+    audio_format: str,
+    out_dir: Path,
+    extra_args: list[str],
+) -> list[str]:
+    cmd = [str(YTDLP)]
+
+    # playlist toggle
+    if no_playlist:
+        cmd += ["--no-playlist"]
+
+    # output template
+    cmd += ["-o", str(out_dir / "%(title)s.%(ext)s")]
+
     if mode == "video":
-        return [
-            str(YTDLP),
-            "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]",
-            "--no-playlist",
-            "-o", str(DOWNLOADS / "%(title)s.%(ext)s"),
-            url
-        ]
+        # container format
+        if video_container == "mp4":
+            cmd += ["-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]"]
+        elif video_container == "mkv":
+            cmd += ["-f", "bestvideo+bestaudio/best", "--merge-output-format", "mkv"]
+        elif video_container == "webm":
+            cmd += ["-f", "bestvideo[ext=webm]+bestaudio[ext=webm]/best[ext=webm]"]
+        else:
+            raise ValueError("Invalid video_container")
+
     elif mode == "audio":
-        return [
-            str(YTDLP),
-            "-f", "bestaudio",
-            "--extract-audio",
-            "--audio-format", "mp3",
-            "--no-playlist",
-            "-o", str(DOWNLOADS / "%(title)s.%(ext)s"),
-            url
-        ]
+        # audio format
+        if audio_format == "mp3":
+            cmd += ["-f", "bestaudio", "--extract-audio", "--audio-format", "mp3"]
+        elif audio_format == "m4a":
+            cmd += ["-f", "bestaudio[ext=m4a]/bestaudio", "--remux-video", "m4a"]
+        elif audio_format == "opus":
+            cmd += ["-f", "bestaudio", "--extract-audio", "--audio-format", "opus"]
+        else:
+            raise ValueError("Invalid audio_format")
     else:
         raise ValueError("Invalid mode")
 
+    # extra user args
+    cmd += extra_args
+
+    cmd += [url]
+    return cmd
+
+def parse_extra_args(extra: str) -> list[str]:
+    """
+    '--embed-thumbnail --write-subs -S "res:1080"' -> ["--embed-thumbnail", "--write-subs", "-S", "res:1080"]
+    """
+    extra = (extra or "").strip()
+    if not extra:
+        return []
+    try:
+        return shlex.split(extra, posix=False)
+    except Exception:
+        # fallback: split by spaces only
+        return extra.split()
+
+# GUI application
 class App(QWidget):
     def __init__(self):
         super().__init__()
+        self.setWindowIcon(QIcon(str(ICON_PATH)))
         self.setWindowTitle("yt-dlp (mp4/mp3) simpol UI")
-        self.resize(820, 460)
+        self.resize(820, 520)
 
         self.proc: QProcess | None = None
 
         layout = QVBoxLayout(self)
 
+        # URL
         layout.addWidget(QLabel("URL"))
         self.url = QLineEdit()
         self.url.setPlaceholderText("paste yo video url here")
         layout.addWidget(self.url)
 
+        # mode radio
         mode_row = QHBoxLayout()
-        self.rb_video = QRadioButton("video(mp4)")
-        self.rb_mp3 = QRadioButton("mp3")
+        self.rb_video = QRadioButton("video")
+        self.rb_audio = QRadioButton("audio")
         self.rb_video.setChecked(True)
 
         group = QButtonGroup(self)
         group.addButton(self.rb_video)
-        group.addButton(self.rb_mp3)
+        group.addButton(self.rb_audio)
+
+        self.rb_video.toggled.connect(self.on_mode_changed)
 
         mode_row.addWidget(self.rb_video)
-        mode_row.addWidget(self.rb_mp3)
+        mode_row.addWidget(self.rb_audio)
         mode_row.addStretch(1)
         layout.addLayout(mode_row)
 
+        # simul option row: playlist toggle + download foler
+        common_row = QHBoxLayout()
+        self.cb_no_playlist = QCheckBox("no playlist")
+        self.cb_no_playlist.setChecked(True)  # basic default
+        common_row.addWidget(self.cb_no_playlist)
+
+        common_row.addWidget(QLabel("downloads:"))
+        self.le_outdir = QLineEdit(str(DOWNLOADS))
+        self.le_outdir.setReadOnly(True)
+        common_row.addWidget(self.le_outdir, 1)
+
+        self.btn_open_dir = QPushButton("open folder")
+        self.btn_open_dir.clicked.connect(self.open_download_folder)
+        common_row.addWidget(self.btn_open_dir)
+
+        common_row.addStretch(1)
+        layout.addLayout(common_row)
+
+        # each mode option : stacked widget
+        self.stack = QStackedWidget()
+        self.page_video = QWidget()
+        self.page_audio = QWidget()
+
+        # video page
+        v_layout = QHBoxLayout(self.page_video)
+        v_layout.addWidget(QLabel("container:"))
+        self.cmb_video_container = QComboBox()
+        self.cmb_video_container.addItems(["mp4", "mkv", "webm"])
+        v_layout.addWidget(self.cmb_video_container)
+        v_layout.addStretch(1)
+
+        # audio page
+        a_layout = QHBoxLayout(self.page_audio)
+        a_layout.addWidget(QLabel("format:"))
+        self.cmb_audio_format = QComboBox()
+        self.cmb_audio_format.addItems(["mp3", "m4a", "opus"])
+        a_layout.addWidget(self.cmb_audio_format)
+        a_layout.addStretch(1)
+
+        self.stack.addWidget(self.page_video)  # index 0
+        self.stack.addWidget(self.page_audio)  # index 1
+        layout.addWidget(self.stack)
+
+        # advanced args
+        adv_row = QHBoxLayout()
+        adv_row.addWidget(QLabel("extra args:"))
+        self.le_extra = QLineEdit()
+        self.le_extra.setPlaceholderText('e.g. --embed-thumbnail --write-subs -S "res:1080"')
+        adv_row.addWidget(self.le_extra, 1)
+
+        self.btn_help = QPushButton("examples")
+        self.btn_help.clicked.connect(self.show_examples)
+        adv_row.addWidget(self.btn_help)
+
+        layout.addLayout(adv_row)
+
+        # start/stop
         btn_row = QHBoxLayout()
         self.btn_start = QPushButton("start")
         self.btn_stop = QPushButton("stop")
@@ -136,10 +247,12 @@ class App(QWidget):
         btn_row.addStretch(1)
         layout.addLayout(btn_row)
 
+        # log
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
         layout.addWidget(self.log, 1)
 
+        # yt-dlp existence check
         if not YTDLP.exists():
             QMessageBox.critical(
                 self,
@@ -147,6 +260,42 @@ class App(QWidget):
                 f"theres no yt dlp in this location:\n{YTDLP}",
             )
             self.btn_start.setEnabled(False)
+
+        self.on_mode_changed()  # initialize stack
+
+    def on_mode_changed(self):
+        # video = 0, audio = 1
+        self.stack.setCurrentIndex(0 if self.rb_video.isChecked() else 1)
+
+    def show_examples(self):
+        QMessageBox.information(
+            self,
+            "extra args examples",
+            "ex:\n\n"
+            "1) subtitle(when its possible):\n"
+            "   --write-subs --sub-langs all,-live_chat\n\n"
+            "2) thumbnail/metadata included (useful for audio):\n"
+            "   --embed-thumbnail --add-metadata\n\n"
+            "3) include uploader in filename:\n"
+            "   -o \"%(uploader)s - %(title)s.%(ext)s\"\n\n"
+            "4) 1080p prefer(when its available):\n"
+            "   -S \"res:1080\""
+        )
+
+    def open_download_folder(self):
+        DOWNLOADS.mkdir(exist_ok=True)
+        try:
+            # Windows
+            if sys.platform.startswith("win"):
+                subprocess.run(["explorer", str(DOWNLOADS)], check=False)
+            # macOS
+            elif sys.platform == "darwin":
+                subprocess.run(["open", str(DOWNLOADS)], check=False)
+            # Linux
+            else:
+                subprocess.run(["xdg-open", str(DOWNLOADS)], check=False)
+        except Exception as e:
+            QMessageBox.warning(self, "Open folder failed", str(e))
 
     def append_log(self, text: str):
         self.log.appendPlainText(text.rstrip())
@@ -156,19 +305,30 @@ class App(QWidget):
         if not url:
             QMessageBox.warning(self, "Input Error", "Please enter a URL.")
             return
-        
+
         DOWNLOADS.mkdir(exist_ok=True)
 
         if not YTDLP.exists():
-            QMessageBox.critical(
-                self,
-                "bro theres no yt-dlp",
-                f"theres no yt dlp in this location:\n{YTDLP}",
-            )
+            QMessageBox.critical(self, "bro theres no yt-dlp", f"theres no yt dlp in this location:\n{YTDLP}")
             return
 
         mode = "video" if self.rb_video.isChecked() else "audio"
-        cmd = build_cmd(mode, url)
+
+        extra_args = parse_extra_args(self.le_extra.text())
+
+        try:
+            cmd = build_cmd(
+                mode,
+                url,
+                no_playlist=self.cb_no_playlist.isChecked(),
+                video_container=self.cmb_video_container.currentText(),
+                audio_format=self.cmb_audio_format.currentText(),
+                out_dir=DOWNLOADS,
+                extra_args=extra_args,
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Option Error", f"Failed to build command:\n{e}")
+            return
 
         self.append_log("Command:")
         self.append_log(" ".join(cmd))
@@ -207,9 +367,12 @@ class App(QWidget):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    
-    ensure_ytdlp(YTDLP)
+    app.setWindowIcon(QIcon(str(ICON_PATH)))
     
     w = App()
+    if not ensure_ytdlp(YTDLP):
+        # yt-dlp not available, exit
+        pass
+
     w.show()
     sys.exit(app.exec())

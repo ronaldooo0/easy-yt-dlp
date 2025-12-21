@@ -1,6 +1,6 @@
 # easy-yt-dlp
 
-A simple GUI wrapper for **yt-dlp**,
+A simple GUI wrapper for **yt-dlp**
 
 made for people who find the command line annoying
 
