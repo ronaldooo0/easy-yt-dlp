@@ -32,23 +32,30 @@ YTDLP = BASE_DIR / "tools" / "yt-dlp.exe"
 YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
 
 
-def ensure_ytdlp(ytdlp_path: Path): # ytdlp_path = YTDLP
-    # check if ytdlp_path exists
+# check if YTDLP(ytdlp_path) exists, ytdlp_path = YTDLP
+def ensure_ytdlp(ytdlp_path: Path):
     if ytdlp_path.exists():
         return
     
     # user agreement check
-    reply = QMessageBox.question(
-        None,
-        "apparently no yt-dlp found",
-        "yt-dlp is not found in the required location.\n\n"
-        "The program needs yt-dlp to work.\n"
-        "It will be downloaded from the official GitHub release.\n\n"
-        "Do you want to continue?",
-        QMessageBox.Yes | QMessageBox.No
+    msg = QMessageBox()
+    msg.setWindowTitle("ALERTA!")
+    msg.setIcon(QMessageBox.Question)
+
+    msg.setText(
+        "yt-dlp is not found in the required location!\n\n" 
+        "This program needs yt-dlp to work,\n" 
+        "it'll be downloaded from official yt-dlp GitHub release!"
     )
-    if reply != QMessageBox.Yes:
-        # closes window if user declines
+
+    btn_yes = msg.addButton("YES YES YES", QMessageBox.YesRole)
+    btn_no = msg.addButton("NEIN NEIN NEIN NEIN", QMessageBox.NoRole)
+
+    msg.setDefaultButton(btn_yes)
+    msg.exec()
+    
+    # closes window if user declines
+    if msg.clickedButton() is not btn_yes:
         return
     
     # ensure parent directory exists
@@ -57,7 +64,6 @@ def ensure_ytdlp(ytdlp_path: Path): # ytdlp_path = YTDLP
     # download yt-dlp 
     try:
         urllib.request.urlretrieve(YT_DLP_URL, ytdlp_path)
-        
     except Exception as e:
         QMessageBox.critical(
             None,
@@ -75,11 +81,16 @@ def ensure_ytdlp(ytdlp_path: Path): # ytdlp_path = YTDLP
         )
         return
 
-    QMessageBox.information(
-        None,
-        "Completed",
-        "yt-dlp has been downloaded successfully."
-    )
+    # download complete!
+    msg = QMessageBox()
+    msg.setWindowTitle("Completed!")
+    msg.setIcon(QMessageBox.Information)
+    msg.setText("yt-dlp has been downloaded successfully!")
+
+    btn_ok = msg.addButton("YAS", QMessageBox.AcceptRole)
+    msg.setDefaultButton(btn_ok)
+
+    msg.exec()
 
 # basic download commdns
 def build_cmd(
@@ -149,7 +160,7 @@ class App(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowIcon(QIcon(str(ICON_PATH)))
-        self.setWindowTitle("yt-dlp (mp4/mp3) simpol UI")
+        self.setWindowTitle("easy-yt-dlp (with cute cat)")
         self.resize(820, 520)
 
         self.proc: QProcess | None = None
@@ -159,14 +170,18 @@ class App(QWidget):
         # URL
         layout.addWidget(QLabel("URL"))
         self.url = QLineEdit()
-        self.url.setPlaceholderText("paste yo video url here")
+        self.url.setPlaceholderText("Paste your video url here!")
         layout.addWidget(self.url)
 
-        # mode radio
+        # mode row (1)
         mode_row = QHBoxLayout()
-        self.rb_video = QRadioButton("video")
-        self.rb_audio = QRadioButton("audio")
+        
+        self.rb_video = QRadioButton("Video")
+        self.rb_audio = QRadioButton("Audio")
         self.rb_video.setChecked(True)
+        
+        self.cb_no_playlist = QCheckBox("No Playlist")
+        self.cb_no_playlist.setChecked(True)
 
         group = QButtonGroup(self)
         group.addButton(self.rb_video)
@@ -177,43 +192,46 @@ class App(QWidget):
         mode_row.addWidget(self.rb_video)
         mode_row.addWidget(self.rb_audio)
         mode_row.addStretch(1)
+        mode_row.addWidget(self.cb_no_playlist)
+        
         layout.addLayout(mode_row)
-
-        # simul option row: playlist toggle + download foler
+        
+        # common row (2)
         common_row = QHBoxLayout()
-        self.cb_no_playlist = QCheckBox("no playlist")
-        self.cb_no_playlist.setChecked(True)  # basic default
-        common_row.addWidget(self.cb_no_playlist)
+        common_row.setContentsMargins(9, 0, 0, 0)
 
-        common_row.addWidget(QLabel("downloads:"))
+        common_row.addWidget(QLabel("Download Location:"))
         self.le_outdir = QLineEdit(str(DOWNLOADS))
         self.le_outdir.setReadOnly(True)
         common_row.addWidget(self.le_outdir, 1)
 
-        self.btn_open_dir = QPushButton("open folder")
+        self.btn_open_dir = QPushButton("Open Folder")
         self.btn_open_dir.clicked.connect(self.open_download_folder)
         common_row.addWidget(self.btn_open_dir)
 
         common_row.addStretch(1)
+        
         layout.addLayout(common_row)
 
-        # each mode option : stacked widget
+        # format row (3)
         self.stack = QStackedWidget()
         self.page_video = QWidget()
         self.page_audio = QWidget()
 
         # video page
         v_layout = QHBoxLayout(self.page_video)
-        v_layout.addWidget(QLabel("container:"))
+        v_layout.addWidget(QLabel("Format:"))
         self.cmb_video_container = QComboBox()
+        self.cmb_video_container.setFixedWidth(90)
         self.cmb_video_container.addItems(["mp4", "mkv", "webm"])
         v_layout.addWidget(self.cmb_video_container)
         v_layout.addStretch(1)
 
         # audio page
         a_layout = QHBoxLayout(self.page_audio)
-        a_layout.addWidget(QLabel("format:"))
+        a_layout.addWidget(QLabel("Format:"))
         self.cmb_audio_format = QComboBox()
+        self.cmb_audio_format.setFixedWidth(90)
         self.cmb_audio_format.addItems(["mp3", "m4a", "opus"])
         a_layout.addWidget(self.cmb_audio_format)
         a_layout.addStretch(1)
@@ -222,14 +240,16 @@ class App(QWidget):
         self.stack.addWidget(self.page_audio)  # index 1
         layout.addWidget(self.stack)
 
-        # advanced args
+        # adv row (4)
         adv_row = QHBoxLayout()
-        adv_row.addWidget(QLabel("extra args:"))
+        adv_row.setContentsMargins(9, 0, 0, 0) 
+        
+        adv_row.addWidget(QLabel("Extra args:"))
         self.le_extra = QLineEdit()
-        self.le_extra.setPlaceholderText('e.g. --embed-thumbnail --write-subs -S "res:1080"')
+        self.le_extra.setPlaceholderText('For people who used to yt-dlp only!  e.g. --embed-thumbnail --write-subs -S "res:1080"')
         adv_row.addWidget(self.le_extra, 1)
 
-        self.btn_help = QPushButton("examples")
+        self.btn_help = QPushButton("Sample args")
         self.btn_help.clicked.connect(self.show_examples)
         adv_row.addWidget(self.btn_help)
 
@@ -237,8 +257,8 @@ class App(QWidget):
 
         # start/stop
         btn_row = QHBoxLayout()
-        self.btn_start = QPushButton("start")
-        self.btn_stop = QPushButton("stop")
+        self.btn_start = QPushButton("Start")
+        self.btn_stop = QPushButton("Stop")
         self.btn_stop.setEnabled(False)
         self.btn_start.clicked.connect(self.start)
         self.btn_stop.clicked.connect(self.stop)
@@ -251,15 +271,6 @@ class App(QWidget):
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
         layout.addWidget(self.log, 1)
-
-        # yt-dlp existence check
-        if not YTDLP.exists():
-            QMessageBox.critical(
-                self,
-                "bro theres no yt-dlp",
-                f"theres no yt dlp in this location:\n{YTDLP}",
-            )
-            self.btn_start.setEnabled(False)
 
         self.on_mode_changed()  # initialize stack
 
