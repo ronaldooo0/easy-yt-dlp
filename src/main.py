@@ -282,7 +282,6 @@ class App(QWidget):
         QMessageBox.information(
             self,
             "extra args examples",
-            "ex:\n\n"
             "1) subtitle(when its possible):\n"
             "   --write-subs --sub-langs all,-live_chat\n\n"
             "2) thumbnail/metadata included (useful for audio):\n"

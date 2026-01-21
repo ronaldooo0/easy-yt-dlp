@@ -20,7 +20,4 @@ made for people who find the command line annoying!
 
 - this tool uses **yt-dlp** internally
 - Please make sure you comply with the terms of service of the website you are downloading from.
-
----
-
-> Currently tested **only on Windows**
+  > Currently tested **only on Windows**
